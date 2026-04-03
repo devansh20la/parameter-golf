@@ -26,6 +26,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.tensorboard import SummaryWriter
 
 # -----------------------------
 # HYPERPARAMETERS
@@ -734,6 +735,12 @@ def main() -> None:
     code = Path(__file__).read_text(encoding="utf-8")
     args = Hyperparameters()
     zeropower_via_newtonschulz5 = torch.compile(zeropower_via_newtonschulz5)
+    
+    # -----------------------------
+    # TENSORBOARD SETUP
+    # -----------------------------
+    os.makedirs(f'logs/{args.run_id}', exist_ok=True)
+    writer = SummaryWriter(log_dir=f'logs/{args.run_id}/events/')
 
     # -----------------------------
     # DISTRIBUTED + CUDA SETUP
@@ -771,7 +778,7 @@ def main() -> None:
     logfile = None
     if master_process:
         os.makedirs("logs", exist_ok=True)
-        logfile = f"logs/{args.run_id}.txt"
+        logfile = f"logs/{args.run_id}/training.log"
         print(logfile)
 
     def log0(msg: str, console: bool = True) -> None:
@@ -994,6 +1001,8 @@ def main() -> None:
                 f"train_time:{training_time_ms:.0f}ms step_avg:{training_time_ms / max(step, 1):.2f}ms"
             )
             torch.cuda.synchronize()
+            writer.add_scalar('val/loss', val_loss, step)
+            writer.add_scalar('val/bpb', val_bpb, step)
             t0 = time.perf_counter()
 
         if last_step:
@@ -1017,6 +1026,8 @@ def main() -> None:
             train_loss += loss.detach()
             (loss * grad_scale).backward()
         train_loss /= grad_accum_steps
+
+        writer.add_scalar('train/loss', train_loss.item(), step)
 
         frac = min(step / args.muon_momentum_warmup_steps, 1.0) if args.muon_momentum_warmup_steps > 0 else 1.0
         muon_momentum = (1 - frac) * args.muon_momentum_warmup_start + frac * args.muon_momentum

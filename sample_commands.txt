@@ -1,0 +1,7 @@
+sudo apt-get update && sudo apt-get install -y python3.12-dev
+
+curl -LsSf https://astral.sh/uv/install.sh | sh && uv venv python==3.12 && source .venv/bin/activate && uv pip install -r requirements.txt
+
+
+python3 data/cached_challenge_fineweb.py --variant sp1024
+
